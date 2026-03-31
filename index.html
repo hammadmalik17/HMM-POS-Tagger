@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Statistical POS Tagging - HMMs | Hammad Malik | 23BCS052</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;1,400&family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0b0e14;
+    --surface: #111520;
+    --card: #161b27;
+    --border: #1e2740;
+    --accent: #e8b84b;
+    --accent2: #4b8fe8;
+    --accent3: #e84b8f;
+    --text: #c8d0e0;
+    --text-dim: #6a7590;
+    --text-bright: #edf2ff;
+    --green: #4be86a;
+    --purple: #a04be8;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-weight: 300;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(72,100,200,0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(72,100,200,0.04) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  main { position: relative; z-index: 1; max-width: 900px; margin: 0 auto; padding: 60px 24px 100px; }
+
+  /* ── HEADER ── */
+  header { margin-bottom: 60px; }
+
+  .course-tag {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: rgba(75,143,232,0.1); border: 1px solid rgba(75,143,232,0.25);
+    color: var(--accent2); font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px; letter-spacing: 1px; padding: 5px 14px;
+    border-radius: 20px; margin-bottom: 22px;
+  }
+  .course-tag::before { content: '◆'; font-size: 8px; }
+
+  .badge { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--accent); letter-spacing: 3px; text-transform: uppercase; margin-bottom: 18px; display: flex; align-items: center; gap: 10px; }
+  .badge::before { content: ''; width: 30px; height: 1px; background: var(--accent); display: inline-block; }
+
+  h1 {
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(32px, 6vw, 54px);
+    color: var(--text-bright);
+    line-height: 1.15;
+    margin-bottom: 12px;
+  }
+  h1 em { font-style: italic; color: var(--accent); }
+
+  .meta { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 20px; }
+  .meta-item { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--text-dim); border: 1px solid var(--border); padding: 5px 12px; border-radius: 4px; }
+  .meta-item span { color: var(--text); }
+
+  /* ── SECTION ── */
+  section { margin-bottom: 50px; }
+  .section-label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px; letter-spacing: 3px; color: var(--text-dim);
+    text-transform: uppercase; margin-bottom: 20px;
+    display: flex; align-items: center; gap: 12px;
+  }
+  .section-label::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+  h2 { font-family: 'Playfair Display', serif; font-size: 22px; color: var(--text-bright); margin-bottom: 12px; }
+
+  p { line-height: 1.8; color: var(--text); margin-bottom: 12px; font-size: 15px; }
+  p strong { color: var(--text-bright); font-weight: 500; }
+
+  /* ── CARDS ── */
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 24px; margin-bottom: 16px; }
+  .card-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media(max-width:600px){ .card-grid { grid-template-columns: 1fr; } }
+  .card h3 { font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: var(--accent); margin-bottom: 10px; }
+  .card p { font-size: 14px; margin: 0; }
+
+  .pill { display: inline-block; background: rgba(232,184,75,0.12); border: 1px solid rgba(232,184,75,0.3); color: var(--accent); font-family: 'IBM Plex Mono', monospace; font-size: 11px; padding: 3px 10px; border-radius: 20px; margin: 3px; }
+  .pill.blue { background: rgba(75,143,232,0.12); border-color: rgba(75,143,232,0.3); color: var(--accent2); }
+  .pill.green { background: rgba(75,232,106,0.12); border-color: rgba(75,232,106,0.3); color: var(--green); }
+  .pill.purple { background: rgba(160,75,232,0.12); border-color: rgba(160,75,232,0.3); color: var(--purple); }
+
+  /* ── DEMO ── */
+  .demo-box { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  .demo-header { background: var(--card); padding: 14px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: var(--text-dim); }
+  .dot { width: 10px; height: 10px; border-radius: 50%; }
+  .dot.r { background: #e84b4b; } .dot.y { background: var(--accent); } .dot.g { background: var(--green); }
+  .demo-body { padding: 24px; }
+
+  .input-row { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
+  .demo-input { flex: 1; min-width: 200px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--text-bright); font-family: 'IBM Plex Mono', monospace; font-size: 14px; padding: 12px 16px; outline: none; transition: border-color 0.2s; }
+  .demo-input:focus { border-color: var(--accent); }
+  .demo-btn { background: var(--accent); color: #0b0e14; border: none; border-radius: 6px; padding: 12px 24px; font-family: 'IBM Plex Mono', monospace; font-size: 13px; font-weight: 600; cursor: pointer; transition: opacity 0.2s; white-space: nowrap; }
+  .demo-btn:hover { opacity: 0.85; }
+
+  .preset-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px; }
+  .preset-btn { font-family: 'IBM Plex Mono', monospace; font-size: 11px; background: transparent; border: 1px solid var(--border); color: var(--text-dim); padding: 5px 12px; border-radius: 4px; cursor: pointer; transition: all 0.15s; }
+  .preset-btn:hover { border-color: var(--accent2); color: var(--accent2); }
+
+  .tagged-output { display: flex; flex-wrap: wrap; gap: 10px; min-height: 60px; padding: 16px; background: var(--bg); border-radius: 8px; border: 1px solid var(--border); }
+
+  .token-block { display: flex; flex-direction: column; align-items: center; animation: popIn 0.3s ease backwards; }
+  @keyframes popIn { from { opacity:0; transform: translateY(8px); } to { opacity:1; transform: translateY(0); } }
+
+  .token-word { font-family: 'IBM Plex Mono', monospace; font-size: 16px; color: var(--text-bright); padding: 6px 12px; border-radius: 6px 6px 0 0; border: 1px solid; border-bottom: none; white-space: nowrap; }
+  .token-tag { font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 1px; padding: 3px 10px; border-radius: 0 0 6px 6px; border: 1px solid; border-top: none; white-space: nowrap; }
+
+  .tag-NN { background: rgba(232,184,75,0.1); border-color: rgba(232,184,75,0.4); color: var(--accent); }
+  .tag-NN .token-tag { background: rgba(232,184,75,0.2); color: var(--accent); border-color: rgba(232,184,75,0.4); }
+  .tag-VB { background: rgba(75,232,106,0.1); border-color: rgba(75,232,106,0.4); color: var(--green); }
+  .tag-VB .token-tag { background: rgba(75,232,106,0.2); color: var(--green); border-color: rgba(75,232,106,0.4); }
+  .tag-DT { background: rgba(75,143,232,0.1); border-color: rgba(75,143,232,0.4); color: var(--accent2); }
+  .tag-DT .token-tag { background: rgba(75,143,232,0.2); color: var(--accent2); border-color: rgba(75,143,232,0.4); }
+  .tag-JJ { background: rgba(160,75,232,0.1); border-color: rgba(160,75,232,0.4); color: var(--purple); }
+  .tag-JJ .token-tag { background: rgba(160,75,232,0.2); color: var(--purple); border-color: rgba(160,75,232,0.4); }
+  .tag-RB { background: rgba(232,75,143,0.1); border-color: rgba(232,75,143,0.4); color: var(--accent3); }
+  .tag-RB .token-tag { background: rgba(232,75,143,0.2); color: var(--accent3); border-color: rgba(232,75,143,0.4); }
+  .tag-IN { background: rgba(150,150,150,0.1); border-color: rgba(150,150,150,0.3); color: #aaa; }
+  .tag-IN .token-tag { background: rgba(150,150,150,0.15); color: #aaa; border-color: rgba(150,150,150,0.3); }
+  .tag-PRP { background: rgba(232,120,75,0.1); border-color: rgba(232,120,75,0.4); color: #e8874b; }
+  .tag-PRP .token-tag { background: rgba(232,120,75,0.2); color: #e8874b; border-color: rgba(232,120,75,0.4); }
+  .tag-PUNCT { background: rgba(80,80,80,0.1); border-color: rgba(80,80,80,0.3); color: #555; }
+  .tag-PUNCT .token-tag { background: transparent; color: #555; border-color: rgba(80,80,80,0.3); }
+
+  /* ── HMM FLOW ── */
+  .hmm-flow { display: flex; align-items: flex-start; gap: 0; overflow-x: auto; padding: 20px 0; justify-content: center; flex-wrap: wrap; }
+  .hmm-step { display: flex; flex-direction: column; align-items: center; min-width: 90px; animation: fadeUp 0.5s ease backwards; }
+  .hmm-step:nth-child(1) { animation-delay: 0.1s; }
+  .hmm-step:nth-child(3) { animation-delay: 0.2s; }
+  .hmm-step:nth-child(5) { animation-delay: 0.3s; }
+  .hmm-step:nth-child(7) { animation-delay: 0.4s; }
+  @keyframes fadeUp { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:none; } }
+
+  .state-circle { width: 64px; height: 64px; border-radius: 50%; border: 2px solid var(--accent); display: flex; align-items: center; justify-content: center; font-family: 'IBM Plex Mono', monospace; font-size: 13px; font-weight: 600; color: var(--accent); background: rgba(232,184,75,0.08); margin-bottom: 8px; }
+  .state-label { font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: var(--text-dim); text-align: center; }
+  .arrow { font-size: 20px; color: var(--border); margin: 22px 4px 0; align-self: flex-start; }
+  .emission-list { margin-top: 6px; display: flex; flex-direction: column; align-items: center; gap: 3px; }
+  .emission { font-family: 'IBM Plex Mono', monospace; font-size: 9px; color: var(--text-dim); }
+
+  /* ── PLAN STEPS ── */
+  .plan-step { display: flex; gap: 16px; margin-bottom: 14px; padding: 18px 20px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; transition: border-color 0.2s, transform 0.2s; cursor: default; }
+  .plan-step:hover { border-color: var(--accent2); transform: translateX(4px); }
+
+  .step-num { font-family: 'IBM Plex Mono', monospace; font-size: 22px; color: var(--border); font-weight: 600; min-width: 32px; line-height: 1; }
+  .step-content h4 { font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: var(--text-bright); margin-bottom: 6px; }
+  .step-content p { font-size: 13px; margin: 0; line-height: 1.6; }
+
+  .status-badge { display: inline-block; font-family: 'IBM Plex Mono', monospace; font-size: 10px; padding: 2px 8px; border-radius: 3px; margin-left: 10px; vertical-align: middle; }
+  .status-planned { background: rgba(75,143,232,0.12); border: 1px solid rgba(75,143,232,0.3); color: var(--accent2); }
+  .status-next { background: rgba(232,184,75,0.12); border: 1px solid rgba(232,184,75,0.3); color: var(--accent); }
+
+  /* ── FORMULA ── */
+  .formula { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 16px 20px; font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: var(--accent2); line-height: 1.8; margin: 12px 0; overflow-x: auto; }
+
+  /* ── LEGEND ── */
+  .legend { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 3px; }
+
+  .divider { height: 1px; background: var(--border); margin: 50px 0; }
+
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+</style>
+</head>
+<body>
+<main>
+
+  <!-- HEADER -->
+  <header>
+    <div class="course-tag">NLP Course Project · Computer Science Department</div>
+    <div class="badge">23BCS052 · Hammad Malik · 2024</div>
+    <h1>Statistical POS Tagging<br>using <em>Hidden Markov Models</em></h1>
+    <div class="meta">
+      <div class="meta-item">Roll # <span>23BCS052</span></div>
+      <div class="meta-item">Student <span>Hammad Malik</span></div>
+      <div class="meta-item">Dataset <span>Penn Treebank</span></div>
+      <div class="meta-item">Method <span>HMM + Viterbi</span></div>
+      <div class="meta-item">Target Accuracy <span>~95–96%</span></div>
+    </div>
+  </header>
+
+  <!-- 01 · FOUNDATION -->
+  <section>
+    <div class="section-label">01 · Foundation</div>
+    <h2>What is Part-of-Speech Tagging?</h2>
+    <p>Every word in a sentence plays a grammatical role. <strong>POS Tagging</strong> is the task of automatically labelling each word with its grammatical category - Noun, Verb, Adjective, etc. It's a foundational step in NLP, enabling downstream tasks like parsing, machine translation, and information extraction.</p>
+
+    <div class="card-grid">
+      <div class="card">
+        <h3>Why it matters</h3>
+        <p>Without knowing word roles, a computer can't understand language structure. "I fish a fish" - the first "fish" is a verb, the second a noun. Context is everything.</p>
+      </div>
+      <div class="card">
+        <h3>The challenge</h3>
+        <p>Words are ambiguous. "Can" can be a noun (tin can), a modal verb (can do), or a regular verb (can tomatoes). The surrounding words determine the correct tag.</p>
+      </div>
+    </div>
+
+    <div style="margin-top:16px;">
+      <p style="font-size:13px; color:var(--text-dim); margin-bottom:8px;">Common Penn Treebank Tags used in this project:</p>
+      <span class="pill">NN - Noun</span>
+      <span class="pill blue">VB - Verb</span>
+      <span class="pill purple">JJ - Adjective</span>
+      <span class="pill green">RB - Adverb</span>
+      <span class="pill blue">DT - Determiner</span>
+      <span class="pill" style="background:rgba(232,120,75,0.12);border-color:rgba(232,120,75,0.4);color:#e8874b;">PRP - Pronoun</span>
+      <span class="pill" style="background:rgba(150,150,150,0.1);border-color:rgba(150,150,150,0.3);color:#aaa;">IN - Preposition</span>
+      <span class="pill" style="background:rgba(75,232,106,0.12);border-color:rgba(75,232,106,0.3);color:var(--green);">MD - Modal</span>
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- 02 · LIVE DEMO -->
+  <section>
+    <div class="section-label">02 · Live Demo</div>
+    <h2>Try the POS Tagger</h2>
+    <p>Type any English sentence and see the tagger assign grammatical tags to each word. This simulates what the trained HMM model will produce.</p>
+
+    <div class="demo-box">
+      <div class="demo-header">
+        <div class="dot r"></div><div class="dot y"></div><div class="dot g"></div>
+        <span style="margin-left:8px;">hmm_pos_tagger.py - interactive demo</span>
+      </div>
+      <div class="demo-body">
+        <div class="input-row">
+          <input class="demo-input" id="sentInput" type="text" placeholder="Type a sentence…" value="The dog runs quickly in the park">
+          <button class="demo-btn" onclick="tagSentence()">Tag it →</button>
+        </div>
+        <div class="preset-row">
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text-dim);line-height:2;">Try:</span>
+          <button class="preset-btn" onclick="preset('She sells beautiful paintings near the river')">She sells paintings</button>
+          <button class="preset-btn" onclick="preset('John quickly read the interesting book')">John read the book</button>
+          <button class="preset-btn" onclick="preset('They can fish in cold water')">They can fish</button>
+          <button class="preset-btn" onclick="preset('The old man slowly walked home')">The old man</button>
+        </div>
+        <div class="tagged-output" id="output"></div>
+        <div class="legend">
+          <div class="legend-item"><div class="legend-dot" style="background:var(--accent)"></div>Noun</div>
+          <div class="legend-item"><div class="legend-dot" style="background:var(--green)"></div>Verb</div>
+          <div class="legend-item"><div class="legend-dot" style="background:var(--purple)"></div>Adjective</div>
+          <div class="legend-item"><div class="legend-dot" style="background:var(--accent3)"></div>Adverb</div>
+          <div class="legend-item"><div class="legend-dot" style="background:var(--accent2)"></div>Determiner</div>
+          <div class="legend-item"><div class="legend-dot" style="background:#e8874b"></div>Pronoun</div>
+          <div class="legend-item"><div class="legend-dot" style="background:#888"></div>Preposition</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- 03 · THE MODEL -->
+  <section>
+    <div class="section-label">03 · The Model</div>
+    <h2>How a Hidden Markov Model Works</h2>
+    <p>An HMM models a sequence of <strong>hidden states</strong> (POS tags) that generate <strong>observable outputs</strong> (words). The current tag depends only on the previous tag - the <strong>Markov assumption</strong>. This simplification makes the maths tractable while still being very powerful.</p>
+
+    <div class="formula">
+      P(tags | words) ∝ ∏ P(word_i | tag_i) × P(tag_i | tag_{i-1})
+      <br>
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;↑ Emission Prob.&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;↑ Transition Prob.
+    </div>
+
+    <div class="hmm-flow" style="margin-top:24px;">
+      <div class="hmm-step">
+        <div class="state-circle">DT</div>
+        <div class="state-label">Determiner</div>
+        <div class="emission-list">
+          <div class="emission">→ "the" 0.62</div>
+          <div class="emission">→ "a" 0.28</div>
+          <div class="emission">→ "an" 0.07</div>
+        </div>
+      </div>
+      <div class="arrow">→</div>
+      <div class="hmm-step">
+        <div class="state-circle" style="border-color:var(--purple);color:var(--purple);background:rgba(160,75,232,0.08);">JJ</div>
+        <div class="state-label">Adjective</div>
+        <div class="emission-list">
+          <div class="emission">→ "quick" 0.04</div>
+          <div class="emission">→ "big" 0.03</div>
+          <div class="emission">→ "old" 0.03</div>
+        </div>
+      </div>
+      <div class="arrow">→</div>
+      <div class="hmm-step">
+        <div class="state-circle">NN</div>
+        <div class="state-label">Noun</div>
+        <div class="emission-list">
+          <div class="emission">→ "dog" 0.01</div>
+          <div class="emission">→ "man" 0.02</div>
+          <div class="emission">→ "park" 0.01</div>
+        </div>
+      </div>
+      <div class="arrow">→</div>
+      <div class="hmm-step">
+        <div class="state-circle" style="border-color:var(--green);color:var(--green);background:rgba(75,232,106,0.08);">VB</div>
+        <div class="state-label">Verb</div>
+        <div class="emission-list">
+          <div class="emission">→ "runs" 0.02</div>
+          <div class="emission">→ "walks" 0.02</div>
+          <div class="emission">→ "reads" 0.01</div>
+        </div>
+      </div>
+    </div>
+    <p style="font-size:13px;color:var(--text-dim);text-align:center;margin-top:8px;">Hidden States (POS Tags) → Observable Words. Arrows = Transition Probabilities.</p>
+
+    <div class="card-grid" style="margin-top:24px;">
+      <div class="card">
+        <h3>📊 Transition Matrix (A)</h3>
+        <p>Learned probability that tag <em>j</em> follows tag <em>i</em>. E.g. P(NN | DT) = 0.55 - nouns very often follow determiners.</p>
+      </div>
+      <div class="card">
+        <h3>💬 Emission Matrix (B)</h3>
+        <p>Probability that a specific word is produced given a tag. E.g. P("runs" | VB) is high; P("runs" | DT) is near zero.</p>
+      </div>
+      <div class="card">
+        <h3>🚀 Initial Probabilities (π)</h3>
+        <p>Probability that a sentence starts with a given tag. Sentences typically begin with DT, PRP, or NNP.</p>
+      </div>
+      <div class="card">
+        <h3>🧮 Viterbi Algorithm</h3>
+        <p>Dynamic programming that finds the most likely tag sequence efficiently in O(N·T²) - where T is the number of tags.</p>
+      </div>
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- 04 · DATASET -->
+  <section>
+    <div class="section-label">04 · Dataset</div>
+    <h2>Penn Treebank Corpus</h2>
+    <p>The <strong>Penn Treebank</strong> is the gold-standard dataset for POS tagging research. It contains over one million words of Wall Street Journal text, manually annotated by trained linguists.</p>
+    <div class="card-grid">
+      <div class="card">
+        <h3>📏 Size</h3>
+        <p>~1 million words, ~50,000 sentences from WSJ financial news (1987–1989). Sections 0–18 train, 19–21 dev, 22–24 test.</p>
+      </div>
+      <div class="card">
+        <h3>🏷️ Tagset</h3>
+        <p>36 POS tags + punctuation. The full PTB tagset is the de facto standard in NLP benchmarking.</p>
+      </div>
+      <div class="card">
+        <h3>🔧 NLTK Access</h3>
+        <p><code style="font-size:12px;color:var(--accent2)">nltk.corpus.treebank</code> - free 10% sample for research. Full corpus via LDC license (LDC99T42).</p>
+      </div>
+      <div class="card">
+        <h3>📈 Benchmark</h3>
+        <p>A well-implemented HMM reaches ~95–96% accuracy on PTB. Our baseline (most-frequent tag) sits at ~92%.</p>
+      </div>
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- 05 · PLAN -->
+  <section>
+    <div class="section-label">05 · Roadmap</div>
+    <h2>Plan to Build This</h2>
+    <p>The project is structured into five sequential milestones. Each builds directly on the last - from raw data to a working, evaluated tagger.</p>
+
+    <div class="plan-step">
+      <div class="step-num">01</div>
+      <div class="step-content">
+        <h4>Load & Preprocess Penn Treebank <span class="status-badge status-next">↑ start here</span></h4>
+        <p>Use NLTK to load tagged sentences. Extract (word, tag) pairs. Split into 80% train / 20% test. Inspect tag frequency distribution to understand the data before modelling.</p>
+      </div>
+    </div>
+
+    <div class="plan-step">
+      <div class="step-num">02</div>
+      <div class="step-content">
+        <h4>Compute Transition Probabilities <span class="status-badge status-planned">planned</span></h4>
+        <p>Count how often tag<sub>j</sub> follows tag<sub>i</sub> across all training sentences. Normalise into probabilities. Apply Laplace (add-1) smoothing so no probability is ever zero.</p>
+      </div>
+    </div>
+
+    <div class="plan-step">
+      <div class="step-num">03</div>
+      <div class="step-content">
+        <h4>Compute Emission Probabilities <span class="status-badge status-planned">planned</span></h4>
+        <p>Count word-given-tag occurrences, normalise. Handle unknown words (OOV) using morphological suffix rules: <code style="font-size:12px;color:var(--accent2)">-ing → VBG, -ed → VBD, -ly → RB</code> and capitalisation cues for proper nouns.</p>
+      </div>
+    </div>
+
+    <div class="plan-step">
+      <div class="step-num">04</div>
+      <div class="step-content">
+        <h4>Implement Viterbi Decoding <span class="status-badge status-planned">planned</span></h4>
+        <p>For any new sentence, use dynamic programming to track the most probable tag at each position, then backtrack through the table to recover the full best-path sequence.</p>
+      </div>
+    </div>
+
+    <div class="plan-step">
+      <div class="step-num">05</div>
+      <div class="step-content">
+        <h4>Evaluate & Analyse Results <span class="status-badge status-planned">planned</span></h4>
+        <p>Report token-level accuracy against PTB gold labels. Build a confusion matrix to identify which tag pairs are most ambiguous. Compare against the most-frequent-tag baseline.</p>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<script>
+const lexicon = {
+  the:'DT',a:'DT',an:'DT',this:'DT',that:'DT',these:'DT',those:'DT',every:'DT',each:'DT',both:'DT',all:'DT',
+  i:'PRP',he:'PRP',she:'PRP',it:'PRP',we:'PRP',they:'PRP',me:'PRP',him:'PRP',her:'PRP',us:'PRP',them:'PRP',
+  you:'PRP',my:'PRP$',his:'PRP$',its:'PRP$',our:'PRP$',their:'PRP$',
+  dog:'NN',cat:'NN',man:'NN',woman:'NN',boy:'NN',girl:'NN',park:'NN',water:'NN',home:'NN',book:'NN',
+  time:'NN',day:'NN',year:'NN',way:'NN',people:'NNS',life:'NN',world:'NN',city:'NN',house:'NN',hand:'NN',
+  fish:'NN',river:'NN',bird:'NNS',painting:'NN',paintings:'NNS',words:'NNS',night:'NN',
+  john:'NNP',mary:'NNP',london:'NNP',paris:'NNP',america:'NNP',
+  is:'VBZ',are:'VBP',was:'VBD',were:'VBD',be:'VB',been:'VBN',being:'VBG',
+  run:'VB',runs:'VBZ',ran:'VBD',running:'VBG',
+  walk:'VB',walks:'VBZ',walked:'VBD',walking:'VBG',
+  read:'VBD',reads:'VBZ',reading:'VBG',
+  sell:'VB',sells:'VBZ',sold:'VBD',selling:'VBG',
+  eat:'VB',eats:'VBZ',ate:'VBD',eating:'VBG',
+  can:'MD',will:'MD',would:'MD',could:'MD',should:'MD',may:'MD',might:'MD',must:'MD',
+  have:'VBP',has:'VBZ',had:'VBD',having:'VBG',
+  do:'VBP',does:'VBZ',did:'VBD',doing:'VBG',
+  go:'VBP',goes:'VBZ',went:'VBD',going:'VBG',
+  see:'VBP',saw:'VBD',seen:'VBN',get:'VBP',got:'VBD',getting:'VBG',
+  make:'VBP',made:'VBD',making:'VBG',know:'VBP',knew:'VBD',known:'VBN',
+  think:'VBP',thought:'VBD',thinking:'VBG',come:'VBP',came:'VBD',coming:'VBG',
+  big:'JJ',small:'JJ',old:'JJ',new:'JJ',good:'JJ',bad:'JJ',great:'JJ',little:'JJ',
+  quick:'JJ',slow:'JJ',fast:'JJ',cold:'JJ',hot:'JJ',beautiful:'JJ',interesting:'JJ',
+  happy:'JJ',sad:'JJ',tall:'JJ',short:'JJ',long:'JJ',high:'JJ',low:'JJ',
+  quickly:'RB',slowly:'RB',well:'RB',very:'RB',really:'RB',also:'RB',
+  always:'RB',never:'RB',often:'RB',sometimes:'RB',just:'RB',now:'RB',still:'RB',
+  in:'IN',on:'IN',at:'IN',by:'IN',for:'IN',with:'IN',about:'IN',from:'IN',
+  of:'IN',to:'IN',into:'IN',onto:'IN',near:'IN',through:'IN',between:'IN',
+  and:'CC',but:'CC',or:'CC',nor:'CC',yet:'CC',so:'CC',
+  '.':'PUNCT',',':'PUNCT','!':'PUNCT','?':'PUNCT',';':'PUNCT',':':'PUNCT'
+};
+
+const VB_tags=['VB','VBZ','VBD','VBG','VBN','VBP','MD'];
+const NN_tags=['NN','NNS','NNP','NNPS'];
+
+function tagWord(word,prevTag){
+  const lower=word.toLowerCase();
+  let tag=lexicon[lower];
+  if(!tag){
+    if(/ing$/.test(lower)) tag='VBG';
+    else if(/ed$/.test(lower)) tag='VBD';
+    else if(/ly$/.test(lower)) tag='RB';
+    else if(/tion$|ness$|ment$|ity$/.test(lower)) tag='NN';
+    else if(/er$|est$/.test(lower)) tag='JJR';
+    else if(/s$/.test(lower)&&prevTag&&NN_tags.includes(prevTag)) tag='VBZ';
+    else if(/s$/.test(lower)) tag='NNS';
+    else if(/^[A-Z]/.test(word)) tag='NNP';
+    else if(prevTag==='DT'||prevTag==='JJ') tag='NN';
+    else if(prevTag&&NN_tags.includes(prevTag)) tag='VBZ';
+    else tag='NN';
+  }
+  if(lower==='fish') tag=prevTag==='MD'?'VB':'NN';
+  if(lower==='fast') tag=(prevTag&&VB_tags.includes(prevTag))?'RB':(prevTag==='DT'||prevTag==='JJ'?'JJ':'RB');
+  return tag;
+}
+
+const tagClass={
+  'NN':'tag-NN','NNS':'tag-NN','NNP':'tag-NN','NNPS':'tag-NN',
+  'VB':'tag-VB','VBZ':'tag-VB','VBD':'tag-VB','VBG':'tag-VB','VBN':'tag-VB','VBP':'tag-VB','MD':'tag-VB',
+  'DT':'tag-DT','JJ':'tag-JJ','JJR':'tag-JJ','JJS':'tag-JJ',
+  'RB':'tag-RB','RBR':'tag-RB','RBS':'tag-RB',
+  'IN':'tag-IN','TO':'tag-IN','CC':'tag-IN',
+  'PRP':'tag-PRP','PRP$':'tag-PRP','WP':'tag-PRP',
+  'PUNCT':'tag-PUNCT'
+};
+
+function tagSentence(){
+  const sent=document.getElementById('sentInput').value.trim();
+  if(!sent) return;
+  const words=sent.match(/[A-Za-z']+|[.,!?;:]/g)||[];
+  const container=document.getElementById('output');
+  container.innerHTML='';
+  let prevTag=null;
+  words.forEach((w,i)=>{
+    const tag=tagWord(w,prevTag);
+    prevTag=tag;
+    const cls=tagClass[tag]||'tag-IN';
+    const block=document.createElement('div');
+    block.className='token-block';
+    block.style.animationDelay=(i*0.07)+'s';
+    block.innerHTML=`<div class="token-word ${cls}">${w}</div><div class="token-tag ${cls}">${tag}</div>`;
+    container.appendChild(block);
+  });
+}
+
+function preset(s){ document.getElementById('sentInput').value=s; tagSentence(); }
+window.onload=()=>tagSentence();
+document.getElementById('sentInput').addEventListener('keydown',e=>{ if(e.key==='Enter') tagSentence(); });
+</script>
+</body>
+</html>
